@@ -69,28 +69,26 @@ elif $tt_built ; then
 	# detached head
 	if ! $tagged_head ; then
 	    # Not tagged, figure out a branch name to add
-	    oIFS="$IFS"
-	    local= origin=
-	    # refs becomes a CSV
-	    refs=$(git show -s --pretty=%D HEAD 2>/dev/null | sed 's/HEAD -> //' 's/, /s/g')
-	    IFS=,
+	    origin=
+	    refs=$(git show -s --pretty=%D HEAD 2>/dev/null \
+		       | sed -e 's/^HEAD -> //' -e 's/ //g' -e 's/,/ /g')
 	    for ref in $refs
 	    do
-		case $label in
+		case $ref in
 		    # shouldn't happen
-		    'tag: *') ;;
-		    'origin/*') origin=$ref ;;
-		    '*') branch=$ref ;;
+		    tag:*) ;;
+		    HEAD) ;;
+		    origin/*) origin=${ref#origin/} ;;
+		    *) branch=$ref ;;
 		esac
 	    done
-	    IFS="$oIFS"
 	    if test -z "$branch" ; then
 		branch="$origin"
 	    fi
 	fi
     elif ! $tagged_head || test $head != refs/heads/main ; then
 	# not tagged or not main, use branch name
-	branch=$head
+	branch=${head#refs/heads/}
     fi
 
     if test -n "$branch" ; then
@@ -103,7 +101,7 @@ echo "INFO: Version: $tt_version"
 if ! test -d $BUILD ; then
     mkdir -p $BUILD/sfpi
     # extract git hashes for here and each submodule
-    "$BIN/git-hash.sh" > $BUILD/sfpi/src-hashes
+    $BIN/git-hash.sh "$tt_version" >$BUILD/sfpi/README.txt
     echo $tt_version > $BUILD/version
 fi
 
@@ -145,11 +143,15 @@ if $sim ; then
     (set -x; nice make -C $BUILD build-sim -j$NCPUS)
 fi
 
+fails=0
+unresolved=0
 if $test_binutils ; then
     (set -x; nice make -C $BUILD -j$NCPUS check-binutils)
     for sum in $(find $BUILD/build-binutils-newlib -name '*.sum')
     do
 	(set -x; nice $BIN/local-xfails.py --output $BUILD --xfails xfails $sum)
+	fails=$((fails + $(grep -c '^FAIL' $BUILD/$(basename $sum) || true)))
+	unresolved=$((unresolved + $(grep -c '^UNRESOLVED' $BUILD/$(basename $sum) || true)))
     done
 fi
 
@@ -160,12 +162,30 @@ if $test_gcc ; then
     for sum in $(find $BUILD/build-gcc-newlib-stage2 -name '*.sum')
     do
 	(set -x; nice $BIN/local-xfails.py --output $BUILD --xfails xfails $sum)
+	fails=$((fails + $(grep -c '^FAIL' $BUILD/$(basename $sum) || true)))
+	unresolved=$((unresolved + $(grep -c '^UNRESOLVED' $BUILD/$(basename $sum) || true)))
     done
 fi
 
 if $test_tt; then
     (set -x; SFPI=$(pwd) nice make -C $BUILD -j$NCPUS NEWLIB_TARGET_BOARDS="$TARGET_BOARDS" check-gcc-tt)
-    (set -x; cp $BUILD/build-gcc-newlib-stage2/gcc/testsuite/gcc/gcc.sum $BUILD)
-    (set -x; cp $BUILD/build-gcc-newlib-stage2/gcc/testsuite/g++/g++.sum $BUILD)
+    for cc in gcc g++
+    do
+	(set -x; cp $BUILD/build-gcc-newlib-stage2/gcc/testsuite/$cc/$cc.sum $BUILD)
+	fails=$((fails + $(grep -c '^FAIL' $BUILD/$cc.sum || true)))
+	unresolved=$((unresolved + $(grep -c '^UNRESOLVED' $BUILD/$cc.sum || true)))
+    done
 fi
 
+if [[ $fails != 0 ]] ; then
+    echo "ERROR: $fails tests failed" >&2
+    if [[ $unresolved != 0 ]] ; then
+	echo "ERROR: $unresolved tests are unresolved" >&2
+    fi
+    exit 1
+elif [[ $unresolved != 0 ]] ; then
+    echo "ERROR: $unresolved tests are unresolved, that's bad" >&2
+    exit 1
+else
+    echo "Tests passed. Yay!"
+fi

@@ -27,17 +27,6 @@ while [ "$#" -ne 0 ] ; do
     shift
 done
 
-if ! $ci ; then
-    # extract git hashes for here and each submodule
-    "$BIN/git-hash.sh" > $BUILD/src-hashes.post
-    if ! cmp -s $BUILD/sfpi/src-hashes $BUILD/src-hashes.post ; then
-	echo "*** WARNING: Source tree has changed since build started ***" >&2
-	if ! $force ; then
-	    exit 1
-	fi
-    fi
-fi
-
 if test -r $BUILD/version ; then
      tt_version=$(cat $BUILD/version)
 else
@@ -45,6 +34,17 @@ else
     exit 1
 fi
 echo "INFO: Version: $tt_version"
+
+if ! $ci ; then
+    # extract git hashes for here and each submodule
+    $BIN/git-hash.sh "$tt_version" > $BUILD/README.post
+    if ! cmp -s $BUILD/sfpi/README.txt $BUILD/README.post ; then
+	echo "*** WARNING: Source tree has changed since build started ***" >&2
+	if ! $force ; then
+	    exit 1
+	fi
+    fi
+fi
 
 # Copy include tree
 tar cf - include | tar xf - -C $BUILD/sfpi
