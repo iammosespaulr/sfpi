@@ -141,7 +141,7 @@ if $dejagnu ; then
 fi
 if $sim ; then
     if ! test -e qemu ; then
-	git clone --depth 64 --branch v7.2.15 https://gitlab.com/qemu-project/qemu.git
+	(set -x; git clone --depth 64 --branch v7.2.15 https://gitlab.com/qemu-project/qemu.git) >/dev/null
     fi
     (set -x; nice make -C $BUILD build-sim -j$NCPUS)
 fi
