@@ -20,7 +20,7 @@ get-hash () {
     fi
     local head=$(git -C $dir rev-parse --symbolic-full-name HEAD)
     local branch=
-    if test $head = "HEAD" ; then
+    if [[ $head = "HEAD" ]] ; then
 	# detached head
 	if ! $tagged_head ; then
 	    # Not tagged, figure out a branch name to add
@@ -37,7 +37,7 @@ get-hash () {
 		    *) branch=$ref ;;
 		esac
 	    done
-	    if test -z "$branch" ; then
+	    if [[ -z $branch ]] ; then
 		branch="$origin"
 	    fi
 	fi
